@@ -243,7 +243,7 @@ function App() {
   return (
     <Container>
       <Stack pb={2}>
-        <Typography variant="h5">Community</Typography>
+        <Typography variant="h5">Stargazers</Typography>
         <Typography variant="subtitle2">
           Get your top starred stargazers!
         </Typography>
@@ -272,7 +272,7 @@ function App() {
         </Box>
         <Stack>{loading && <Typography>Loading...</Typography>}</Stack>
         <Stack>
-          <Link href="https://github.com/thevahidal/community" target="_blank">
+          <Link href="https://github.com/thevahidal/stargazers" target="_blank">
             <Typography>Github</Typography>
           </Link>
         </Stack>
