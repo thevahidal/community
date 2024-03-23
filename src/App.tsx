@@ -245,7 +245,7 @@ function App() {
       <Stack pb={2}>
         <Typography variant="h5">Stargazers</Typography>
         <Typography variant="subtitle2">
-          Get your top starred stargazers!
+          Get insight about your stargazers!
         </Typography>
       </Stack>
       <Stack
