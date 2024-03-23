@@ -1,16 +1,27 @@
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useQuery, gql } from "@apollo/client";
 import {
   MaterialReactTable,
   useMaterialReactTable,
   type MRT_ColumnDef, //if using TypeScript (optional, but recommended)
 } from "material-react-table";
+import {
+  Avatar,
+  Box,
+  Button,
+  Container,
+  Link,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 
 import "./App.css";
+import { useDebounce } from "use-debounce";
 
 const GET_STARGAZERS = gql`
-  query ($endCursor: String) {
-    repository(owner: "thevahidal", name: "soul") {
+  query ($owner: String!, $repoName: String!, $endCursor: String) {
+    repository(owner: $owner, name: $repoName) {
       stargazers(
         first: 100
         orderBy: { direction: ASC, field: STARRED_AT }
@@ -27,12 +38,14 @@ const GET_STARGAZERS = gql`
             id
             login
             avatarUrl
+            url
             followers {
               totalCount
             }
             repositories(
               first: 1
               orderBy: { direction: DESC, field: STARGAZERS }
+              ownerAffiliations: OWNER
             ) {
               edges {
                 node {
@@ -77,27 +90,39 @@ interface Stargazer {
   avatarUrl: string;
   followers: number;
   topRepo: Repo;
+  url: string;
 }
 
 function App() {
+  const [repo, setRepo] = React.useState("thevahidal/soul");
+  const [globalLoading, setGlobalLoading] = React.useState<boolean>(true);
+  const [debouncedRepo] = useDebounce(repo, 1000);
   const { loading, error, data, fetchMore } = useQuery(GET_STARGAZERS, {
     variables: {
       endCursor: null,
+      owner: debouncedRepo.split("/")[0],
+      repoName: debouncedRepo.split("/")[1],
     },
   });
 
   const columns = useMemo<MRT_ColumnDef<Stargazer>[]>(
     () => [
       {
-        accessorKey: "avatarUrl",
-        header: "Avatar",
-        Cell: ({ cell }) => (
-          <img src={cell.getValue<string>()} style={{ width: 50 }} />
-        ),
-      },
-      {
         accessorKey: "login",
         header: "Username",
+        Cell: ({ cell }) => (
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            justifyContent="flex-start"
+          >
+            <Avatar src={cell.row.original.avatarUrl} />
+            <a href={cell.row.original.url} target="_blank">
+              {cell.getValue<string>()}
+            </a>
+          </Stack>
+        ),
       },
       {
         accessorKey: "followers",
@@ -105,23 +130,32 @@ function App() {
       },
       {
         accessorKey: "topRepo.name",
-        header: "Top Repo",
+        header: "Top Starred Repo (TSR)",
+        Cell: ({ cell }) => (
+          <a
+            href={cell.row.original.url + "/" + cell.getValue<string>()}
+            target="_blank"
+          >
+            {cell.getValue<string>()}
+          </a>
+        ),
+      },
+      {
+        id: "stargazers",
+        accessorKey: "topRepo.stargazers",
+        header: "TSR Stargazers",
       },
       {
         accessorKey: "topRepo.languages",
-        header: "Languages",
-      },
-      {
-        accessorKey: "topRepo.stargazers",
-        header: "Stargazers",
+        header: "TSR Language",
       },
       {
         accessorKey: "topRepo.watchers",
-        header: "Watchers",
+        header: "TSR Watchers",
       },
       {
         accessorKey: "topRepo.forks",
-        header: "Forks",
+        header: "TSR Forks",
       },
     ],
     [],
@@ -134,6 +168,7 @@ function App() {
         login: stargazer.node.login,
         avatarUrl: stargazer.node.avatarUrl,
         followers: stargazer.node.followers.totalCount,
+        url: stargazer.node.url,
         topRepo: {
           name: stargazer.node.repositories.edges[0]?.node.name,
           languages:
@@ -152,28 +187,40 @@ function App() {
   const table = useMaterialReactTable({
     columns,
     data: cleanedData || [],
-    enableColumnOrdering: true,
+    initialState: {
+      sorting: [
+        {
+          id: "stargazers", //sort by age by default on page load
+          desc: true,
+        },
+      ],
+    },
   });
 
   useEffect(() => {
     if (data?.repository?.stargazers?.pageInfo?.hasNextPage) {
+      setGlobalLoading(true);
       fetchMore({
+        query: GET_STARGAZERS,
         variables: {
           endCursor: data.repository.stargazers.pageInfo.endCursor,
+          repoName: debouncedRepo.split("/")[1],
+          owner: debouncedRepo.split("/")[0],
         },
         updateQuery,
       });
+    } else {
+      setGlobalLoading(false);
     }
-  }, [data?.repository.stargazers?.pageInfo?.endCursor]);
-
-  console.log(cleanedData?.length);
-  console.log(data?.repository?.stargazers?.pageInfo?.hasNextPage);
+  }, [data]);
 
   const updateQuery = (
     previousResult: { repository: { stargazers: any } },
-    { nextResult }: { nextResult: { repository: { stargazers: any } } },
+    {
+      fetchMoreResult,
+    }: { fetchMoreResult: { repository: { stargazers: any } } },
   ) => {
-    if (!nextResult) {
+    if (!fetchMoreResult) {
       return previousResult;
     }
 
@@ -183,23 +230,55 @@ function App() {
         ...previousResult.repository,
         stargazers: {
           ...previousResult.repository.stargazers,
-          pageInfo: nextResult.repository.stargazers.pageInfo,
+          pageInfo: fetchMoreResult.repository.stargazers.pageInfo,
           edges: [
             ...previousResult.repository.stargazers.edges,
-            ...nextResult.repository.stargazers.edges,
+            ...fetchMoreResult.repository.stargazers.edges,
           ],
         },
       },
     };
   };
 
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p>Error: {error.message}</p>;
-
   return (
-    <>
+    <Container>
+      <Stack pb={2}>
+        <Typography variant="h5">Community</Typography>
+        <Typography variant="subtitle2">
+          Get your top starred stargazers!
+        </Typography>
+      </Stack>
+      <Stack
+        direction={"row"}
+        pb={2}
+        justifyContent={"space-between"}
+        alignItems={"center"}
+      >
+        <Box
+          component="form"
+          onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
+            e.preventDefault();
+          }}
+        >
+          <TextField
+            placeholder="owner/repo"
+            name="repo"
+            value={repo}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              setRepo(e.target.value);
+              setGlobalLoading(true);
+            }}
+          />
+        </Box>
+        <Stack>{loading && <Typography>Loading...</Typography>}</Stack>
+        <Stack>
+          <Link href="https://github.com/thevahidal/community" target="_blank">
+            <Typography>Github</Typography>
+          </Link>
+        </Stack>
+      </Stack>
       <MaterialReactTable table={table} />
-    </>
+    </Container>
   );
 }
 
