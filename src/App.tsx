@@ -37,6 +37,7 @@ const GET_STARGAZERS = gql`
           node {
             id
             login
+            name
             avatarUrl
             url
             followers {
@@ -66,6 +67,10 @@ const GET_STARGAZERS = gql`
                   forks {
                     totalCount
                   }
+                  mentionableUsers {
+                    totalCount
+                  }
+                  pushedAt
                 }
               }
             }
@@ -82,11 +87,14 @@ interface Repo {
   stargazers: number;
   watchers: number;
   forks: number;
+  mentionableUsers: number;
+  pushedAt: string;
 }
 
 interface Stargazer {
   id: string;
   login: string;
+  name: string;
   avatarUrl: string;
   followers: number;
   topRepo: Repo;
@@ -108,8 +116,8 @@ function App() {
   const columns = useMemo<MRT_ColumnDef<Stargazer>[]>(
     () => [
       {
-        accessorKey: "login",
-        header: "Username",
+        accessorKey: "name",
+        header: "Name",
         Cell: ({ cell }) => (
           <Stack
             direction="row"
@@ -136,7 +144,7 @@ function App() {
             href={cell.row.original.url + "/" + cell.getValue<string>()}
             target="_blank"
           >
-            {cell.getValue<string>()}
+            {cell.row.original.login}/{cell.getValue<string>()}
           </a>
         ),
       },
@@ -157,6 +165,19 @@ function App() {
         accessorKey: "topRepo.forks",
         header: "TSR Forks",
       },
+      {
+        accessorKey: "topRepo.mentionableUsers",
+        header: "TSR Collaborators",
+      },
+      {
+        accessorKey: "topRepo.pushedAt",
+        header: "TSR Last Pushed At",
+        Cell: ({ cell }) => (
+          <Typography>
+            {new Date(cell.getValue<string>()).toLocaleString()}
+          </Typography>
+        ),
+      },
     ],
     [],
   );
@@ -166,11 +187,13 @@ function App() {
       ?.map((stargazer: any) => ({
         id: stargazer.node.id,
         login: stargazer.node.login,
+        name: stargazer.node.name,
         avatarUrl: stargazer.node.avatarUrl,
         followers: stargazer.node.followers.totalCount,
         url: stargazer.node.url,
         topRepo: {
           name: stargazer.node.repositories.edges[0]?.node.name,
+          pushedAt: stargazer.node.repositories.edges[0]?.node.pushedAt,
           languages:
             stargazer.node.repositories.edges[0]?.node.languages.edges[0]?.node
               .name,
@@ -179,6 +202,9 @@ function App() {
           watchers:
             stargazer.node.repositories.edges[0]?.node.watchers.totalCount,
           forks: stargazer.node.repositories.edges[0]?.node.forks.totalCount,
+          mentionableUsers:
+            stargazer.node.repositories.edges[0]?.node.mentionableUsers
+              .totalCount,
         },
       }))
       .filter((stargazer: Stargazer) => stargazer.topRepo.name);
